@@ -19,6 +19,7 @@ namespace MyBhapticsTactsuit
         public bool systemInitialized = false;
         // Event to start and stop the heartbeat thread
         private static ManualResetEvent HeartBeat_mrse = new ManualResetEvent(false);
+        private static ManualResetEvent JumpJet_mrse = new ManualResetEvent(false);
         // dictionary of all feedback patterns found in the bHaptics directory
         public Dictionary<String, FileInfo> FeedbackMap = new Dictionary<String, FileInfo>();
 
@@ -35,6 +36,17 @@ namespace MyBhapticsTactsuit
             }
         }
 
+        public void JumpJetFunc()
+        {
+            while (true)
+            {
+                // Check if reset event is active
+                JumpJet_mrse.WaitOne();
+                bHapticsLib.bHapticsManager.PlayRegistered("JumpJetRumble");
+                Thread.Sleep(1010);
+            }
+        }
+
         public TactsuitVR()
         {
             LOG("Initializing suit");
@@ -46,6 +58,8 @@ namespace MyBhapticsTactsuit
             LOG("Starting HeartBeat thread...");
             Thread HeartBeatThread = new Thread(HeartBeatFunc);
             HeartBeatThread.Start();
+            Thread JumpJetThread = new Thread(JumpJetFunc);
+            JumpJetThread.Start();
         }
 
         public void LOG(string logStr)
@@ -148,6 +162,17 @@ namespace MyBhapticsTactsuit
             HeartBeat_mrse.Reset();
         }
 
+        public void StartJumpJet()
+        {
+            JumpJet_mrse.Set();
+        }
+
+        public void StopJumpJet()
+        {
+            JumpJet_mrse.Reset();
+            StopHapticFeedback("JumpJetRumble");
+        }
+
         public bool IsPlaying(String effect)
         {
             return bHapticsLib.bHapticsManager.IsPlaying(effect);
@@ -172,6 +197,7 @@ namespace MyBhapticsTactsuit
             // Yes, looks silly here, but if you have several threads like this, this is
             // very useful when the player dies or starts a new level
             StopHeartBeat();
+            StopJumpJet();
         }
 
 
