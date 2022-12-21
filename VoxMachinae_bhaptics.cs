@@ -8,7 +8,7 @@ using HarmonyLib;
 using MyBhapticsTactsuit;
 using Il2CppVoxClient;
 
-[assembly: MelonInfo(typeof(VoxMachinae_bhaptics.VoxMachinae_bhaptics), "VoxMachinae_bhaptics", "1.0.0", "Florian Fahrenberger")]
+[assembly: MelonInfo(typeof(VoxMachinae_bhaptics.VoxMachinae_bhaptics), "VoxMachinae_bhaptics", "1.1.0", "Florian Fahrenberger")]
 [assembly: MelonGame("SpaceBulletDynamicsCorporation", "VoxMachinae")]
 
 
@@ -30,33 +30,18 @@ namespace VoxMachinae_bhaptics
         public class bhaptics_PlaySound
         {
             [HarmonyPostfix]
-            public static void Postfix(string playEventName)
+            public static void Postfix(VoxSound __instance, string playEventName)
             {
-                if (playEventName == "FootImpact")
-                {
-                    tactsuitVr.PlaybackHaptics("FootStep");
-                    return;
-                }
-                if (playEventName.Contains("Impact"))
-                {
-                    tactsuitVr.PlaybackHaptics("BellyRumble");
-                    return;
-                }
-                if (playEventName.Contains("Explode"))
-                {
-                    tactsuitVr.PlaybackHaptics("BellyRumble");
-                    return;
-                }
-                if (playEventName.Contains("Muzzle"))
-                {
-                    return;
-                }
-                if (playEventName.Contains("Reload"))
-                {
-                    return;
-                }
+                float max_dist = 100.0f;
+                if (!__instance.core.positionSet) return;
+                float distance = (__instance.core.sourcePosition - __instance.transform.position).magnitude;
+                if (playEventName == "FootImpact") return;
+                if (playEventName.Contains("Muzzle")) return;
+                if (playEventName.Contains("Reload")) return;
+                if (playEventName.Contains("Play_mech_shutdown")) tactsuitVr.StopThreads();
                 if (playEventName.Contains("FootStepResonance"))
                 {
+                    tactsuitVr.PlaybackHaptics("FootStep");
                     return;
                 }
                 switch (playEventName)
@@ -64,12 +49,9 @@ namespace VoxMachinae_bhaptics
                     case "EjectJet":
                         tactsuitVr.PlaybackHaptics("JumpJetRumble", 1.5f);
                         break;
-                    case "MeleeImpact":
-                        tactsuitVr.PlaybackHaptics("MechGetsHit");
-                        break;
                     case "BlastShieldClose":
-                        tactsuitVr.StopThreads();
                         tactsuitVr.PlaybackHaptics("BellyRumble");
+                        tactsuitVr.StopThreads();
                         break;
                     case "BlastShieldOpen":
                         tactsuitVr.PlaybackHaptics("BellyRumble");
@@ -79,20 +61,43 @@ namespace VoxMachinae_bhaptics
                         tactsuitVr.StopThreads();
                         break;
                     case "CockpitRattle":
-                        tactsuitVr.PlaybackHaptics("BellyRumble");
+                        //tactsuitVr.LOG("Rattle");
+                        tactsuitVr.PlaybackHaptics("BellyRumble", 0.1f);
                         break;
                     case "CockpitShake":
-                        tactsuitVr.PlaybackHaptics("BellyRumble");
+                        //tactsuitVr.LOG("Shake");
+                        tactsuitVr.PlaybackHaptics("BellyRumble", 0.2f);
                         break;
+                    /*
                     case "InternalFuelStart":
-                        tactsuitVr.StartJumpJet();
+                        //tactsuitVr.LOG("FuelStart");
+                        tactsuitVr.PlaybackHaptics("JumpJetRumble");
                         break;
                     case "InternalFuelStop":
-                        tactsuitVr.StopJumpJet();
+                        //tactsuitVr.LOG("FuelStop");
+                        tactsuitVr.PlaybackHaptics("JumpJetRumble");
                         break;
+                    */
                     default:
-                        tactsuitVr.LOG("Play: " + playEventName);
+                        //if (!playEventName.Contains("Explode") && !playEventName.Contains("Impact")) tactsuitVr.LOG("Play: " + playEventName);
                         break;
+                }
+                if (distance <= 0.01f) return;
+                //tactsuitVr.LOG("Distances: " + __instance.transform.position.ToString() + " " + __instance.core.sourcePosition.ToString() + " " + distance.ToString());
+                if (distance >= max_dist) return;
+                float intensity = ((max_dist - distance) / max_dist) * ((max_dist - distance) / max_dist);
+                if (playEventName.Contains("Impact"))
+                {
+                    //tactsuitVr.LOG("Impact: " + playEventName + " distance: " + distance.ToString());
+                    tactsuitVr.PlaybackHaptics("BellyRumble", intensity);
+                    return;
+                }
+                if (playEventName.Contains("Explode"))
+                {
+                    //tactsuitVr.LOG("Explode: " + playEventName + " distance: " + distance.ToString());
+                    if (distance <= 5.0f) tactsuitVr.PlaybackHaptics("MechGetsHit");
+                    tactsuitVr.PlaybackHaptics("ExplosionUp", intensity);
+                    return;
                 }
             }
         }
@@ -126,6 +131,38 @@ namespace VoxMachinae_bhaptics
             public static void Postfix()
             {
                 tactsuitVr.StopThreads();
+            }
+        }
+
+        [HarmonyPatch(typeof(Cockpit), "ResetDamage", new Type[] { })]
+        public class bhaptics_ResetDamage
+        {
+            [HarmonyPostfix]
+            public static void Postfix(Cockpit __instance)
+            {
+                tactsuitVr.StopThreads();
+            }
+        }
+
+        [HarmonyPatch(typeof(Cockpit), "UpdateForLaunch", new Type[] { })]
+        public class bhaptics_LaunchUpdate
+        {
+            [HarmonyPostfix]
+            public static void Postfix()
+            {
+                tactsuitVr.StopThreads();
+            }
+        }
+
+        [HarmonyPatch(typeof(EntityInstance), "UpdateJumpJet", new Type[] { typeof(bool), typeof(bool), typeof(bool), typeof(bool) })]
+        public class bhaptics_UpdateJump
+        {
+            [HarmonyPostfix]
+            public static void Postfix(EntityInstance __instance, bool jump)
+            {
+                if (__instance.uniqueId != myID) return;
+                if (jump) tactsuitVr.StartJumpJet();
+                else tactsuitVr.StopJumpJet();
             }
         }
 
